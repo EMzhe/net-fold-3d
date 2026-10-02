@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图推折纸助手 · 展开图立体预览</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">⬢</span>
+      <h1>图推折纸助手</h1>
+      <span class="sub">上传展开图截图 → 自动生成 3D 立体图 · 任意角度观察 · 对面关系一目了然</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左列：上传与网格编辑 -->
+    <section class="col-left">
+      <div class="card">
+        <div class="card-title">① 上传截图
+          <span class="tip">支持点击选择、拖拽进来、或直接 Ctrl+V 粘贴</span>
+        </div>
+        <div id="dropZone" class="drop-zone">
+          <label class="upload-btn">
+            选择图片
+            <input type="file" id="fileInput" accept="image/*" hidden>
+          </label>
+          <div class="drop-hint">将展开图截图拖到此处 / Ctrl+V 粘贴</div>
+        </div>
+        <div id="detectMsg" class="detect-msg"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">② 识别与网格编辑
+          <span class="tip">识别不准时，直接在图上点击格子增删</span>
+        </div>
+        <div class="toolbar">
+          <label>图形类型
+            <select id="modeSel">
+              <option value="auto" selected>自动判断</option>
+              <option value="square">正方体（四边形展开图）</option>
+              <option value="tri">四面体（三角形展开图）</option>
+            </select>
+          </label>
+          <button id="redetect" class="btn">重新识别</button>
+          <label class="chk"><input type="checkbox" id="cropMode"> 框选裁剪</label>
+          <button id="cropApply" class="btn warn" style="display:none">应用裁剪</button>
+        </div>
+        <div class="canvas-box">
+          <canvas id="netCanvas"></canvas>
+        </div>
+      </div>
+
+      <div class="card" id="infoPanel" style="display:none">
+        <div class="card-title">③ 折叠结果分析</div>
+        <div id="validMsg" class="valid-msg"></div>
+        <div id="faceList" class="face-list"></div>
+        <div id="oppositeBox" class="opposite-box"></div>
+      </div>
+    </section>
+
+    <!-- 右列：3D 查看 -->
+    <section class="col-right">
+      <div class="card viewer-card">
+        <div class="card-title">3D 立体预览
+          <span class="tip">拖拽旋转 · 滚轮缩放</span>
+        </div>
+        <div class="viewer-box">
+          <canvas id="view3d"></canvas>
+        </div>
+        <div class="controls">
+          <div class="ctrl-row">
+            <span class="ctrl-label">折叠进度</span>
+            <input type="range" id="foldSlider" min="0" max="100" value="100">
+            <button id="playBtn" class="btn primary">▶ 播放折叠</button>
+          </div>
+          <div class="ctrl-row">
+            <label class="chk"><input type="checkbox" id="autoRotate"> 自动旋转</label>
+            <button id="resetView" class="btn">重置视角</button>
+            <span class="view-presets">
+              视角：
+              <button class="btn mini" data-view="0,1.5708">前</button>
+              <button class="btn mini" data-view="3.1416,1.5708">后</button>
+              <button class="btn mini" data-view="1.5708,1.5708">右</button>
+              <button class="btn mini" data-view="-1.5708,1.5708">左</button>
+              <button class="btn mini" data-view="0.65,0.25">上</button>
+              <button class="btn mini" data-view="0.65,2.89">下</button>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="card help-card">
+        <div class="card-title">使用说明</div>
+        <ul class="help-list">
+          <li>截取题目中的<b>展开图</b>（尽量只包含展开图本身，画面越干净识别越准）</li>
+          <li>粘贴或上传后自动识别网格并折叠成 3D 立体图形，每个面就是截图里对应的图案</li>
+          <li>拖动「折叠进度」或点「播放折叠」可以看展开图逐渐折成立体的过程</li>
+          <li>下方「对面关系」直接给出三组互相正对的面——图推折纸题的关键结论</li>
+          <li>若截图里展开图是斜的或识别出错，可用「框选裁剪」截出干净的展开图后重新识别，或直接点击格子手动修正</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">所有图片仅在本地浏览器中处理，不会上传到任何服务器</footer>
+
+  <script src="js/three.min.js"></script>
+  <script src="js/mathx.js"></script>
+  <script src="js/detect.js"></script>
+  <script src="js/fold.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/viewer3d.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
