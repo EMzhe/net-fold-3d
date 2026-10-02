@@ -131,6 +131,42 @@ body {
 
 .chk { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; color: var(--text-light); }
 
+/* 一图多形（选项 A/B/C/D）切换条 */
+.fig-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -2px 0 10px;
+  padding: 8px 10px;
+  background: #f2f7ff;
+  border: 1px solid #d6e4ff;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.fig-picker .fp-title { color: var(--text-light); }
+.fig-picker .fp-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.fig-picker .fp-btn:hover { border-color: var(--primary); color: var(--primary); }
+.fig-picker .fp-btn.on {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+.fig-picker .fp-btn .bad {
+  font-size: 11px;
+  opacity: .75;
+  margin-left: 4px;
+}
+
 .canvas-box {
   border: 1px solid var(--border);
   border-radius: 10px;

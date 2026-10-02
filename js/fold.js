@@ -233,5 +233,65 @@
     net._cells = null; net._adj = null; net._signs = null;
   }
 
-  global.Fold = { foldNet, invalidate, DIHEDRAL };
+  /* 智能纠错：识别出的面数不对 / 折不成正方体时，
+   * 尝试「删掉 1 个多余面」或「补上 1~2 个疑似漏掉的面」，返回第一个能折成有效正方体的方案 */
+  function autoRepair(net, extras) {
+    if (!net || net.type !== 'square') return null;
+    const base = [...net.mask.keys()];
+    const make = (keys) => ({
+      type: 'square', origin: net.origin.slice(), s: net.s, mask: new Map(keys.map(k => [k, true]))
+    });
+    const tryKeys = (keys) => {
+      if (keys.length !== 6) return null;
+      const cand = make(keys);
+      const res = foldNet(cand, 1);
+      return res.valid ? cand : null;
+    };
+
+    /* 面数过多：逐个删掉一个面试试 */
+    if (base.length > 6) {
+      for (const k of base) {
+        const cand = tryKeys(base.filter(x => x !== k));
+        if (cand) return { net: cand, action: 'remove', count: 1 };
+      }
+    }
+    /* 面数不足：从“疑似漏掉的面”里补 */
+    if (base.length < 6 && extras && extras.length) {
+      for (const e of extras) {
+        const cand = tryKeys(base.concat([e.key]));
+        if (cand) return { net: cand, action: 'add', count: 1 };
+      }
+      const lim = Math.min(8, extras.length);
+      for (let i = 0; i < lim; i++) {
+        for (let j = i + 1; j < Math.min(10, extras.length); j++) {
+          const cand = tryKeys(base.concat([extras[i].key, extras[j].key]));
+          if (cand) return { net: cand, action: 'add', count: 2 };
+        }
+      }
+    }
+    /* 面数正好但形状不对（常见于整体错了一格）：尝试替换 1~2 个面 */
+    if (base.length === 6 && extras && extras.length) {
+      const ex = extras.slice(0, 12);
+      for (const k of base) {
+        for (const e of ex) {
+          const cand = tryKeys(base.filter(x => x !== k).concat([e.key]));
+          if (cand) return { net: cand, action: 'replace', count: 1 };
+        }
+      }
+      for (let a = 0; a < base.length; a++) {
+        for (let b = a + 1; b < base.length; b++) {
+          const rest = base.filter((_, i) => i !== a && i !== b);
+          for (let i = 0; i < ex.length; i++) {
+            for (let j = i + 1; j < ex.length; j++) {
+              const cand = tryKeys(rest.concat([ex[i].key, ex[j].key]));
+              if (cand) return { net: cand, action: 'replace', count: 2 };
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  global.Fold = { foldNet, invalidate, autoRepair, DIHEDRAL };
 })(window);

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>bench</title></head>
+<body>
+<pre id="out">pending</pre>
+<script src="../js/mathx.js"></script>
+<script src="../js/detect.js"></script>
+<script src="../js/fold.js"></script>
+<script>
+fetch('bench.js').then(r => r.text()).then(t => {
+  try {
+    const res = eval(t);
+    document.getElementById('out').textContent = typeof res === 'string' ? res : JSON.stringify(res);
+  } catch (e) {
+    document.getElementById('out').textContent = 'ERR ' + e.message + '\n' + e.stack;
+  }
+}).catch(e => { document.getElementById('out').textContent = 'FETCH ERR ' + e.message; });
+</script>
+</body>
+</html>

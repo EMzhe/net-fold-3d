@@ -48,6 +48,7 @@
           <label class="chk"><input type="checkbox" id="cropMode"> 框选裁剪</label>
           <button id="cropApply" class="btn warn" style="display:none">应用裁剪</button>
         </div>
+        <div id="figPicker" class="fig-picker" style="display:none"></div>
         <div class="canvas-box">
           <canvas id="netCanvas"></canvas>
         </div>
@@ -94,7 +95,8 @@
       <div class="card help-card">
         <div class="card-title">使用说明</div>
         <ul class="help-list">
-          <li>截取题目中的<b>展开图</b>（尽量只包含展开图本身，画面越干净识别越准）</li>
+          <li>截取题目中的<b>展开图</b>（画面越干净识别越准；带题干文字、多个选项并排也能自动挑出展开图）</li>
+          <li>截图里有 A/B/C/D 多个选项时，上方会出现切换条，点「第 N 个」即可逐个分析</li>
           <li>粘贴或上传后自动识别网格并折叠成 3D 立体图形，每个面就是截图里对应的图案</li>
           <li>拖动「折叠进度」或点「播放折叠」可以看展开图逐渐折成立体的过程</li>
           <li>下方「对面关系」直接给出三组互相正对的面——图推折纸题的关键结论</li>

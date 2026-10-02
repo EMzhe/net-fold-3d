@@ -41,6 +41,12 @@
 
     getCropRect() { return this.cropRect; }
 
+    /* 高亮“当前正在分析的图形”（一图多形时用），传 null 取消 */
+    setHighlight(rect) {
+      this.highlight = rect || null;
+      this._render();
+    }
+
     _fit() {
       const box = this._contentBox();
       const cw = this.canvas.clientWidth || 480;
@@ -109,6 +115,17 @@
       }
       if (this.img) ctx.drawImage(this.img, this.view.ox, this.view.oy, this.img.width * this.view.scale, this.img.height * this.view.scale);
 
+      if (this.highlight && !this.cropMode) {
+        const h = this.highlight;
+        const [sx, sy] = this.toScreen([h.minX, h.minY]);
+        ctx.save();
+        ctx.strokeStyle = '#0ca678';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([7, 5]);
+        ctx.strokeRect(sx - 3, sy - 3, (h.maxX - h.minX) * this.view.scale + 6,
+          (h.maxY - h.minY) * this.view.scale + 6);
+        ctx.restore();
+      }
       if (this.net && !this.cropMode) this._renderNet(ctx);
       if (this.cropMode && this.cropRect) {
         const r = this.cropRect;
@@ -142,16 +159,17 @@
           const b = this.toScreen([x, n.origin[1] + (maxR + 2) * n.s]);
           ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
         }
-        /* 已选格子 */
+        /* 已选格子：线条不完整的面标黄提示重点确认 */
         for (const k of n.mask.keys()) {
           const [r, c] = k.split(',').map(Number);
           const x = n.origin[0] + c * n.s, y = n.origin[1] + r * n.s;
           const a = this.toScreen([x, y]);
           const w = n.s * this.view.scale;
-          ctx.fillStyle = 'rgba(47,109,246,0.20)';
+          const weak = n.weak && n.weak.has(k);
+          ctx.fillStyle = weak ? 'rgba(232,163,61,0.28)' : 'rgba(47,109,246,0.20)';
           ctx.fillRect(a[0], a[1], w, w);
-          ctx.strokeStyle = '#2f6df6';
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = weak ? '#e8a33d' : '#2f6df6';
+          ctx.lineWidth = weak ? 3 : 2;
           ctx.strokeRect(a[0], a[1], w, w);
         }
       } else {

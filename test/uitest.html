@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>uitest</title></head>
+<body>
+<iframe id="f" src="../index.html" style="width:1280px;height:1000px;border:0"></iframe>
+<pre id="out">pending</pre>
+<script>
+const q = new URLSearchParams(location.search);
+const MODE = q.get('mode') || 'multi';     // multi | single | tetra
+const log = [];
+const out = document.getElementById('out');
+const f = document.getElementById('f');
+
+function drawNets(list, s, gap, bg) {
+  const pad = 14;
+  let maxR = 0, maxC = 0;
+  for (const cells of list) for (const [r, c] of cells) { maxR = Math.max(maxR, r); maxC = Math.max(maxC, c); }
+  const W = list.length * ((maxC + 1) * s) + (list.length - 1) * gap + pad * 2;
+  const H = (maxR + 1) * s + pad * 2;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = bg || '#fff'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.lineJoin = 'miter';
+  list.forEach((cells, k) => {
+    const ox = pad + k * ((maxC + 1) * s + gap), oy = pad;
+    for (const [r, c] of cells) ctx.strokeRect(ox + c * s, oy + r * s, s, s);
+  });
+  return cv;
+}
+
+function drawTetra(s) {
+  const h = s * Math.sqrt(3) / 2;
+  const W = Math.round(2 * s + 40), H = Math.round(2 * h + 40);
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  const O = [20, 20];
+  const P = (i, j) => [O[0] + i * s + j * s / 2, O[1] + j * h];
+  const line = (a, b) => { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); };
+  line(P(0, 0), P(2, 0)); line(P(2, 0), P(0, 2)); line(P(0, 2), P(0, 0));
+  line(P(1, 0), P(0, 1)); line(P(1, 0), P(1, 1)); line(P(0, 1), P(1, 1));
+  return cv;
+}
+
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+f.onload = async () => {
+  try {
+    await wait(400);
+    const w = f.contentWindow;
+    let cv;
+    if (MODE === 'multi') {
+      cv = drawNets([
+        [[0,1],[1,0],[1,1],[1,2],[1,3],[2,1]],          // 十字
+        [[0,0],[0,1],[1,1],[1,2],[1,3],[2,3]],          // 2-3-1
+        [[0,1],[1,1],[2,0],[2,1],[2,2],[3,1]]           // T 型
+      ], 46, 40);
+    } else if (MODE === 'tetra') {
+      cv = drawTetra(70);
+    } else {
+      cv = drawNets([[[0,1],[1,0],[1,1],[1,2],[1,3],[2,1]]], 46, 40);
+    }
+    w.__app.loadURL(cv.toDataURL());
+    await wait(1200);
+    const doc = w.document;
+    const picker = doc.getElementById('figPicker');
+    const btns = [...picker.querySelectorAll('.fp-btn')].map(b => b.textContent);
+    log.push('pickerVisible=' + (picker.style.display !== 'none') + ' btns=' + JSON.stringify(btns));
+    log.push('msg=' + doc.getElementById('detectMsg').textContent);
+    log.push('valid=' + doc.getElementById('validMsg').textContent);
+    log.push('faces=' + doc.getElementById('faceList').children.length);
+    log.push('oppRows=' + doc.getElementById('oppositeBox').querySelectorAll('.opp-row').length);
+
+    /* 逐个切换图形，检查每个都能成立 */
+    const all = [...picker.querySelectorAll('.fp-btn')];
+    for (let i = 0; i < all.length; i++) {
+      all[i].click();
+      await wait(250);
+      log.push('fig' + (i + 1) + ': ' + doc.getElementById('validMsg').textContent +
+        ' faces=' + doc.getElementById('faceList').children.length);
+    }
+    out.textContent = log.join('\n');
+  } catch (e) {
+    out.textContent = 'ERR ' + e.message + '\n' + e.stack;
+  }
+};
+</script>
+</body>
+</html>

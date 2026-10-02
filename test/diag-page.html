@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>diag</title></head>
+<body>
+<pre id="out">pending</pre>
+<script src="../js/mathx.js"></script>
+<script src="../js/detect.js"></script>
+<script src="../js/fold.js"></script>
+<script>
+(async function () {
+  const p = (f) => fetch(f).then(r => r.text()).then(t => eval(t));
+  try {
+    const _ = await p('bench.js');
+    const res = await p('diag.js');
+    document.getElementById('out').textContent = typeof res === 'string' ? res : JSON.stringify(res);
+  } catch (e) {
+    document.getElementById('out').textContent = 'ERR ' + e.message + '\n' + e.stack;
+  }
+})();
+</script>
+</body>
+</html>

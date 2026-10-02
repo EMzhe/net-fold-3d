@@ -7,7 +7,9 @@
     srcCanvas: null,   // 当前工作图（可能裁剪过）
     net: null,
     mode: 'auto',      // auto | square | tri
-    animId: null
+    animId: null,
+    figures: [],       // 截图里识别出的所有图形（一图多形时可切换）
+    figIndex: 0        // 当前分析的图形序号
   };
 
   let viewer = null, editor = null;
@@ -37,6 +39,8 @@
 
   function setSource(cv) {
     state.srcCanvas = cv;
+    state.figPicked = false;
+    state.figIndex = 0;
     editor.setImage(cv);
     viewer.setImage(cv);
     $('cropMode').checked = false;
@@ -51,18 +55,91 @@
     const cv = state.srcCanvas;
     const data = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height);
     const D = global.Detect;
-    let net = null;
+    let figures = [];
     try {
-      if (state.mode === 'square') net = D.detectSquare(data);
-      else if (state.mode === 'tri') net = D.detectTriangle(data);
-      else net = D.autoDetect(data);
+      figures = D.detectAllFigures(data).figures.filter(f => f.square || f.tri);
     } catch (err) { console.error(err); }
+    state.figures = figures;
 
+    /* 默认选可信度最高的那个；用户手动切过之后就沿用他选的序号 */
+    let idx = state.figIndex < figures.length ? state.figIndex : 0;
+    if (!state.figPicked) {
+      let bi = 0, bs = -Infinity;
+      figures.forEach((f, i) => {
+        const p = D.bestNetOfFigure(f);
+        if (p.score > bs) { bs = p.score; bi = i; }
+      });
+      idx = bi;
+    }
+    buildFigPicker(figures, idx);
+    applyFigure(idx);
+  }
+
+  /* 一图多形（如选项 A/B/C/D 并排）时给出切换按钮 */
+  function buildFigPicker(figures, active) {
+    const box = $('figPicker');
+    box.innerHTML = '';
+    if (!figures || figures.length < 2) { box.style.display = 'none'; return; }
+    box.style.display = 'flex';
+    const title = document.createElement('span');
+    title.className = 'fp-title';
+    title.textContent = `图里检测到 ${figures.length} 个图形，选择要分析的：`;
+    box.appendChild(title);
+    figures.forEach((f, i) => {
+      const b = document.createElement('button');
+      b.className = 'fp-btn' + (i === active ? ' on' : '');
+      const n = (state.mode === 'tri' ? f.tri : state.mode === 'square' ? f.square : D_pick(f)) || null;
+      const ok = n && (n.type === 'square'
+        ? global.Fold.foldNet(n, 1).valid
+        : global.Fold.foldNet(n, 1).valid);
+      b.innerHTML = `第 ${i + 1} 个` + (ok ? '' : '<span class="bad">待修正</span>');
+      b.addEventListener('click', () => {
+        state.figPicked = true;
+        buildFigPicker(figures, i);
+        applyFigure(i);
+      });
+      box.appendChild(b);
+    });
+  }
+
+  function D_pick(f) { return global.Detect.bestNetOfFigure(f).net; }
+
+  function applyFigure(idx) {
+    state.figIndex = idx;
+    const f = state.figures[idx];
+    let net = null;
+    if (f) {
+      if (state.mode === 'square') net = f.square;
+      else if (state.mode === 'tri') net = f.tri;
+      else net = global.Detect.bestNetOfFigure(f).net;
+    }
+    editor.setHighlight(f ? f.bbox : null);
+    applyFigureNet(net);
+  }
+
+  function applyFigureNet(net) {
+    const cv = state.srcCanvas;
     if (net) {
+      /* 智能纠错：面数不对或折不成正方体时，自动尝试补/删/替换一个面 */
+      let fixNote = '';
+      if (net.type === 'square') {
+        const repair = global.Fold.autoRepair(net, net.extras);
+        if (repair) {
+          net = repair.net;
+          fixNote = repair.action === 'add'
+            ? `（自动补上 ${repair.count} 个漏识别的面）`
+            : repair.action === 'remove'
+              ? `（自动去掉 ${repair.count} 个误识别的面）`
+              : `（自动修正 ${repair.count} 个面的位置）`;
+        }
+      }
       applyNet(net);
-      showMsg(net.type === 'square'
-        ? `识别到正方体展开图（${net.mask.size} 个面），可点击左侧格子微调`
-        : `识别到四面体展开图（${net.tris.size} 个三角形），可点击左侧三角形微调`, false);
+      const weak = net.weakCount || 0;
+      const which = state.figures.length > 1 ? `（图里第 ${state.figIndex + 1} 个，共 ${state.figures.length} 个）` : '';
+      showMsg((net.type === 'square'
+        ? `识别到正方体展开图（${net.mask.size} 个面）${which}${fixNote}`
+        : `识别到四面体展开图（${net.tris.size} 个三角形）${which}${fixNote}`) +
+        (weak ? `；有 ${weak} 个面线条不完整，已在图上标黄，可点击确认` : '；可点击格子微调'), !!weak);
     } else {
       /* 识别失败：给一个默认网格供手动编辑 */
       const W = cv.width, H = cv.height;
