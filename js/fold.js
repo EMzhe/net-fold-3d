@@ -19,7 +19,10 @@
     return ka < kb ? ka + '|' + kb : kb + '|' + ka;
   };
 
-  /* 由 mask 生成 cells：[{key, poly:[[x,y],...]}]，顶点统一为法线朝 +Z 的顺序 */
+  /* 由 mask 生成 cells：[{key, poly:[[x,y],...]}]
+   * 注意顶点绕向：图像坐标 y 向下，3D 世界 y 向上，两者互为镜像。
+   * 折叠时会做一次 Y 镜像，所以这里要按「图像顺时针」排列，
+   * 镜像后才是 3D 里的逆时针，法线才朝 +Z（朝向观察者 = 图案朝外）。 */
   function buildCells(net) {
     const cells = [];
     if (net.type === 'square') {
@@ -32,7 +35,7 @@
           [x0 + (c + 1) * s, y0 + (r + 1) * s],
           [x0 + c * s, y0 + (r + 1) * s]
         ];
-        if (signedArea(poly) < 0) poly.reverse();
+        if (signedArea(poly) > 0) poly.reverse();
         cells.push({ key, poly });
       }
     } else {
@@ -45,7 +48,7 @@
         let poly = up
           ? [P(i, j), P(i + 1, j), P(i, j + 1)]
           : [P(i + 1, j), P(i, j + 1), P(i + 1, j + 1)];
-        if (signedArea(poly) < 0) poly.reverse();
+        if (signedArea(poly) > 0) poly.reverse();
         cells.push({ key, poly });
       }
     }
@@ -88,11 +91,16 @@
       return { faces: [], valid: false, message: '展开图为空，请先在网格中点选格子', opposite: [], meanCenter: [0, 0, 0], type: net.type };
     }
 
-    /* 基准面：平移到原点并归一化为单位尺寸（poly 是像素坐标），
-     * 法线 +Z（朝外），立体折向 -Z 侧 */
+    /* 基准面：平移到原点并归一化为单位尺寸（poly 是像素坐标）。
+     * 关键：图像 y 向下、3D 世界 y 向上，必须做一次 Y 镜像（scaling3 的 sy 取负），
+     * 否则展开图在 3D 里是上下颠倒的——那是一次镜像，会改变手性，
+     * 折出来的立方体图案排布与实际展开图正好相反。 */
     const bc = centroid2(cells[0].poly);
     const k = 1 / (net.s || 1);
-    const baseM = M.multiply(M.translation(-bc[0], -bc[1], 0), M.scaling(k));
+    const baseM = M.multiply(
+      M.translation(-k * bc[0], k * bc[1], 0),
+      M.scaling3(k, -k, k)
+    );
 
     const Mt = new Array(cells.length);  // 当前 t 下的变换
     const M1 = new Array(cells.length);  // t=1 时的变换
@@ -180,8 +188,9 @@
       if (faces.length !== 6) {
         return { valid: false, message: `正方体展开图需要 6 个面（当前 ${faces.length} 个），请继续点选或删除格子`, opposite: [], labels: [] };
       }
+      /* +Y 在世界里朝屏幕上方（图像已做 Y 镜像对齐），所以 +Y = 上 */
       const AXIS_LABEL = [
-        ['x', 1, '右'], ['x', -1, '左'], ['y', -1, '上'], ['y', 1, '下'],
+        ['x', 1, '右'], ['x', -1, '左'], ['y', 1, '上'], ['y', -1, '下'],
         ['z', 1, '前'], ['z', -1, '后']
       ];
       const labels = new Array(6).fill('');

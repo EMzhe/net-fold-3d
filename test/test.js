@@ -47,6 +47,44 @@ console.log('[正方体折叠]');
   assert('5 个面提示不足', !res.valid && /6 个面/.test(res.message), res.message);
 }
 
+/* 折叠朝向：3D 里的摆放必须与图片一致，不能上下镜像（镜像会改变手性，折叠结论会反） */
+{
+  const cells = [[0, 1], [1, 0], [1, 1], [1, 2], [1, 3], [2, 1]];
+  const mask = new Map(cells.map(([r, c]) => [r + ',' + c, true]));
+  const net = { type: 'square', origin: [0, 0], s: 40, mask };
+  const flat = Fold.foldNet(net, 0);
+  const cy2 = (f) => f.poly2d.reduce((s, p) => s + p[1], 0) / f.poly2d.length;
+  const cy3 = (f) => f.verts3.reduce((s, v) => s + v[1], 0) / f.verts3.length;
+  const topInImg = flat.faces.reduce((a, b) => (cy2(a) < cy2(b) ? a : b));
+  const ys = flat.faces.map(cy3);
+  assert('平铺时朝向与图片一致（图上最上一格在屏幕最上方）',
+    Math.abs(cy3(topInImg) - Math.max(...ys)) < 1e-6,
+    'top y=' + cy3(topInImg).toFixed(2) + ' max=' + Math.max(...ys).toFixed(2));
+  assert('平铺时所有面法线朝 +Z（图案面朝观察者）',
+    flat.faces.every(f => f.normal[2] > 0.99), flat.faces.map(f => f.normal[2].toFixed(2)).join(','));
+  const res = Fold.foldNet(net, 1);
+  assert('折叠后图案朝外（各面法线背离立方体中心）',
+    res.faces.every(f => {
+      const off = [f.center[0] - res.meanCenter[0], f.center[1] - res.meanCenter[1], f.center[2] - res.meanCenter[2]];
+      const l = Math.hypot(off[0], off[1], off[2]) || 1;
+      return (f.normal[0] * off[0] + f.normal[1] * off[1] + f.normal[2] * off[2]) / l > 0.9;
+    }),
+    res.faces.map(f => {
+      const off = [f.center[0] - res.meanCenter[0], f.center[1] - res.meanCenter[1], f.center[2] - res.meanCenter[2]];
+      const l = Math.hypot(off[0], off[1], off[2]) || 1;
+      return ((f.normal[0] * off[0] + f.normal[1] * off[1] + f.normal[2] * off[2]) / l).toFixed(2);
+    }).join(','));
+  /* 十字展开图：竖排的上下两片应变成「前 / 后」，横排四片绕成一圈 */
+  const labelAt = (r, c) => res.labels[res.faces.findIndex(f => f.key === r + ',' + c)];
+  assert('方位标签正确（上/下/左/右/前/后各一次）',
+    [[0, 1], [1, 0], [1, 1], [1, 2], [1, 3], [2, 1]].map(([r, c]) => labelAt(r, c))
+      .sort().join('') === ['上', '下', '左', '右', '前', '后'].sort().join(''),
+    [[0, 1], [1, 0], [1, 1], [1, 2], [1, 3], [2, 1]].map(([r, c]) => r + ',' + c + '=' + labelAt(r, c)).join(' '));
+  assert('十字竖排两片互为对面', labelAt(0, 1) !== labelAt(2, 1) &&
+    [['前', '后'], ['上', '下'], ['左', '右']].some(p =>
+      p.includes(labelAt(0, 1)) && p.includes(labelAt(2, 1))));
+}
+
 /* ---------- 2. 四面体折叠 ---------- */
 console.log('[四面体折叠]');
 {

@@ -49,6 +49,14 @@
       0, 0, 0, 1
     ],
 
+    /* 非等比缩放（sx,sy,sz）——sy 取负即沿 X 轴镜像 */
+    scaling3: (sx, sy, sz) => [
+      sx, 0, 0, 0,
+      0, sy, 0, 0,
+      0, 0, sz, 0,
+      0, 0, 0, 1
+    ],
+
     /* 绕单位轴旋转（Rodrigues 公式） */
     axisAngle(axis, ang) {
       const n = V.normalize(axis);

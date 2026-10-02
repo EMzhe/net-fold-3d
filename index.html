@@ -66,7 +66,7 @@
     <section class="col-right">
       <div class="card viewer-card">
         <div class="card-title">3D 立体预览
-          <span class="tip">拖拽旋转 · 滚轮缩放</span>
+          <span class="tip">拖拽任意翻滚 · Shift+拖拽 滚转 · 滚轮/双指缩放</span>
         </div>
         <div class="viewer-box">
           <canvas id="view3d"></canvas>
@@ -88,6 +88,8 @@
               <button class="btn mini" data-view="-1.5708,1.5708">左</button>
               <button class="btn mini" data-view="0.65,0.25">上</button>
               <button class="btn mini" data-view="0.65,2.89">下</button>
+              <button class="btn mini" id="rollLeft">↺</button>
+              <button class="btn mini" id="rollRight">↻</button>
             </span>
           </div>
         </div>
@@ -98,7 +100,8 @@
           <li>截取题目中的<b>展开图</b>（画面越干净识别越准；带题干文字、多个选项并排也能自动挑出展开图）</li>
           <li>截图里有 A/B/C/D 多个选项时，上方会出现切换条，点「第 N 个」即可逐个分析</li>
           <li>粘贴或上传后自动识别网格并折叠成 3D 立体图形，每个面就是截图里对应的图案</li>
-          <li>拖动「折叠进度」或点「播放折叠」可以看展开图逐渐折成立体的过程</li>
+          <li>拖动「折叠进度」或点「播放折叠」可以看展开图逐渐折成立体的过程（按图片原样折叠，图案朝外）</li>
+          <li>3D 里按住左键<b>任意方向拖拽</b>即可 360° 翻滚，没有角度限制；按住 <b>Shift</b> 拖拽（或点 ↺ ↻）做画面内滚转</li>
           <li>下方「对面关系」直接给出三组互相正对的面——图推折纸题的关键结论</li>
           <li>若截图里展开图是斜的或识别出错，可用「框选裁剪」截出干净的展开图后重新识别，或直接点击格子手动修正</li>
         </ul>

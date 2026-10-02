@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>uitest2 · 折叠朝向与旋转自由度</title></head>
+<body>
+<iframe id="f" src="../index.html" style="width:1280px;height:1000px;border:0"></iframe>
+<pre id="out">pending</pre>
+<script>
+const log = [];
+const out = document.getElementById('out');
+const f = document.getElementById('f');
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+/* 画一个 1-4-1 十字展开图，并在最上面那格画一个实心方块做「方位标记」 */
+function makeImg() {
+  const s = 60, pad = 20;
+  const cells = [[0, 1], [1, 0], [1, 1], [1, 2], [1, 3], [2, 1]];
+  const W = 4 * s + pad * 2 + s, H = 3 * s + pad * 2;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.lineJoin = 'miter';
+  const x0 = pad + s, y0 = pad;
+  for (const [r, c] of cells) ctx.strokeRect(x0 + c * s, y0 + r * s, s, s);
+  /* 最上面那格（0,1）中心画实心方块 */
+  ctx.fillStyle = '#000';
+  ctx.fillRect(x0 + 1 * s + s / 2 - 10, y0 + 0 * s + s / 2 - 10, 20, 20);
+  return cv;
+}
+
+/* 把世界坐标点投影到屏幕（NDC） */
+function project(w, p) {
+  const v = new w.THREE.Vector3(p[0], p[1], p[2]);
+  const viewer = w.__app.viewer;
+  v.applyMatrix4(viewer.group.matrixWorld);
+  v.project(viewer.camera);
+  return [v.x, v.y];   // NDC: x 右正, y 上正
+}
+
+f.onload = async () => {
+  try {
+    await wait(400);
+    const w = f.contentWindow;
+    const doc = w.document;
+    w.__app.loadURL(makeImg().toDataURL());
+    await wait(1200);
+    const viewer = w.__app.viewer;
+    log.push('valid=' + doc.getElementById('validMsg').textContent);
+
+    /* ---- A. 平铺状态（t=0）：图形在 3D 里的上下左右必须与图片一致 ---- */
+    w.__app.state && (w.__app.state.net) && viewer.setT(0);
+    await wait(120);
+    viewer.setView(0, Math.PI / 2);      // 正对 XY 平面：屏幕右=+X，屏幕上=+Y
+    w.THREE && viewer.group.updateMatrixWorld(true);
+    await wait(120);
+
+    const res0 = w.Fold.foldNet(w.__app.state.net, 0);
+    const mc = res0.meanCenter;
+    /* 找带标记的那面（图像最上面那格 = poly2d 中心 y 最小） */
+    const cy2 = (f2) => f2.poly2d.reduce((s, p) => s + p[1], 0) / f2.poly2d.length;
+    const cx2 = (f2) => f2.poly2d.reduce((s, p) => s + p[0], 0) / f2.poly2d.length;
+    const topFace = res0.faces.reduce((a, b) => (cy2(a) < cy2(b) ? a : b));
+    const botFace = res0.faces.reduce((a, b) => (cy2(a) > cy2(b) ? a : b));
+    const pTop = project(w, [
+      topFace.center[0] - mc[0], topFace.center[1] - mc[1], topFace.center[2] - mc[2]]);
+    const pBot = project(w, [
+      botFace.center[0] - mc[0], botFace.center[1] - mc[1], botFace.center[2] - mc[2]]);
+    log.push('图上最上一格 -> 屏幕 y=' + pTop[1].toFixed(3) +
+             ' / 最下一格 -> 屏幕 y=' + pBot[1].toFixed(3) +
+             '  => ' + (pTop[1] > pBot[1] ? '✓ 与图片一致' : '✗ 上下颠倒'));
+    /* 左右：图像最左那格应在屏幕左边 */
+    const leftFace = res0.faces.reduce((a, b) => (cx2(a) < cx2(b) ? a : b));
+    const rightFace = res0.faces.reduce((a, b) => (cx2(a) > cx2(b) ? a : b));
+    const pL = project(w, [leftFace.center[0] - mc[0], leftFace.center[1] - mc[1], leftFace.center[2] - mc[2]]);
+    const pR = project(w, [rightFace.center[0] - mc[0], rightFace.center[1] - mc[1], rightFace.center[2] - mc[2]]);
+    log.push('图上最左一格 -> 屏幕 x=' + pL[0].toFixed(3) +
+             ' / 最右一格 -> 屏幕 x=' + pR[0].toFixed(3) +
+             '  => ' + (pL[0] < pR[0] ? '✓ 与图片一致' : '✗ 左右镜像'));
+
+    /* ---- B. 旋转自由度：能不能翻到「倒过来」以及滚转 ---- */
+    const q0 = viewer.quat.clone();
+    const drag = (dx, dy, shift) => {
+      const cv = viewer.canvas;
+      const mk = (type, x, y) => new w.PointerEvent(type, {
+        clientX: x, clientY: y, bubbles: true, pointerId: 1, button: 0, buttons: 1,
+        shiftKey: !!shift
+      });
+      cv.dispatchEvent(mk('pointerdown', 300, 300));
+      let x = 300, y = 300;
+      for (let i = 1; i <= 10; i++) {
+        x += dx / 10; y += dy / 10;
+        cv.dispatchEvent(mk('pointermove', x, y));
+      }
+      cv.dispatchEvent(mk('pointerup', x, y));
+    };
+    /* 判据 1：垂直方向能连转整整一圈并回到原点。
+     * 旧版 phi 被夹在 [0.05, π-0.05]，狂拖只会卡在边界，绝不可能回到起点。 */
+    viewer.setView(0, Math.PI / 2);
+    const qStart = viewer.quat.clone();
+    drag(0, 2 * Math.PI / 0.009, false);    // 正好 360°
+    const back = qStart.angleTo(viewer.quat) * 180 / Math.PI;
+    log.push('垂直狂拖整 360° 后与原朝向夹角=' + back.toFixed(1) + '°  => ' +
+             (back < 8 ? '✓ 无角度限制，能连翻一圈' : '✗ 被夹住了'));
+
+    /* 判据 2：滚转——旧版相机 up 恒为 +Y，世界 +Y 在屏幕上永远是竖直的；
+     * 新版 Shift 拖拽后它应当明显倾斜。 */
+    viewer.setView(0, Math.PI / 2);
+    const upDir = () => new w.THREE.Vector3(0, 1, 0)
+      .applyQuaternion(viewer.group.quaternion).normalize();
+    const up0 = upDir();
+    log.push('滚转前 世界上方 在屏幕上的方向=(' + up0.x.toFixed(2) + ',' + up0.y.toFixed(2) + ')（竖直）');
+    drag(Math.PI / 2 / 0.006, 0, true);      // Shift+水平拖 ≈ 90° 滚转
+    const up1 = upDir();
+    log.push('滚转后 世界上方 在屏幕上的方向=(' + up1.x.toFixed(2) + ',' + up1.y.toFixed(2) + ')  => ' +
+             (Math.abs(up1.x) > 0.7 ? '✓ 画面内可自由滚转（旧版做不到）' : '✗ 滚转无效'));
+
+    /* 判据 3：任意组合拖拽后仍能回到预设视角 */
+    drag(500, 300, false);
+    drag(200, 0, true);
+    viewer.resetView();
+    const dReset = new w.THREE.Quaternion().setFromAxisAngle(new w.THREE.Vector3(0, 1, 0), -0.65)
+      .premultiply(new w.THREE.Quaternion().setFromAxisAngle(new w.THREE.Vector3(1, 0, 0), Math.PI / 2 - 1.05))
+      .angleTo(viewer.quat) * 180 / Math.PI;
+    log.push('乱拖后 resetView 与默认视角夹角=' + dReset.toFixed(1) + '°  => ' +
+             (dReset < 2 ? '✓ 可复位' : '✗'));
+
+    /* 收尾：摆成「平铺 + 正对镜头」，方便截图对比原图 */
+    viewer.setT(0);
+    viewer.setView(0, Math.PI / 2);
+    await wait(200);
+    out.textContent = log.join('\n');
+  } catch (e) {
+    out.textContent = 'ERR ' + e.message + '\n' + e.stack + '\n' + log.join('\n');
+  }
+};
+</script>
+</body>
+</html>

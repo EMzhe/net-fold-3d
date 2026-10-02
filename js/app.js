@@ -308,6 +308,8 @@
     $('playBtn').addEventListener('click', playFold);
     $('autoRotate').addEventListener('change', (e) => { viewer.autoRotate = e.target.checked; });
     $('resetView').addEventListener('click', () => viewer.resetView());
+    $('rollLeft').addEventListener('click', () => viewer.setRoll(-15));
+    $('rollRight').addEventListener('click', () => viewer.setRoll(15));
     document.querySelectorAll('[data-view]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const [t, p] = btn.getAttribute('data-view').split(',').map(Number);

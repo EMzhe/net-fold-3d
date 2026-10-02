@@ -1,10 +1,15 @@
-/* 3D 查看器：three.js 渲染折叠过程，面片直接使用截图 UV 贴图，
- * 支持拖拽旋转、滚轮缩放、自动旋转、折叠进度动画与视角预设。 */
+/* 3D 查看器：three.js 渲染折叠过程，面片直接使用截图 UV 贴图。
+ * 旋转采用四元数轨迹球：绕任意方向自由翻滚，没有角度限制、不会万向锁，
+ * 按住 Shift（或右键）拖动可做画面内滚转。 */
 (function (global) {
   'use strict';
   const THREE = global.THREE;
 
   const PALETTE = [0x2f6df6, 0xe8590c, 0x0ca678, 0xd6336c, 0x7048e8, 0xf59f00];
+  const AX_X = new THREE.Vector3(1, 0, 0);
+  const AX_Y = new THREE.Vector3(0, 1, 0);
+  const AX_Z = new THREE.Vector3(0, 0, 1);
+  const DEFAULT_VIEW = [0.65, 1.05];
 
   class Viewer3D {
     constructor(canvas) {
@@ -27,7 +32,10 @@
       dir2.position.set(-3, -1.5, -2.5);
       this.scene.add(amb, dir1, dir2);
 
-      this.orbit = { theta: 0.65, phi: 1.05, radius: 4.2 };
+      this.radius = 4.2;
+      this.quat = new THREE.Quaternion();   // 当前朝向（作用在模型组上）
+      this._q = new THREE.Quaternion();
+      this._qa = new THREE.Quaternion();
       this.autoRotate = false;
       this.net = null;
       this.t = 1;
@@ -38,6 +46,7 @@
       this.onFoldResult = null;
 
       this._bindEvents();
+      this.setView(DEFAULT_VIEW[0], DEFAULT_VIEW[1]);
       this._resize();
       this._loop();
       if (window.ResizeObserver) {
@@ -148,14 +157,31 @@
       this.renderer.render(this.scene, this.camera);
     }
 
+    /* theta = 方位角，phi = 天顶角（与旧版球坐标视角一致） */
     setView(theta, phi) {
-      this.orbit.theta = theta;
-      this.orbit.phi = phi;
-      this._updateCamera();
+      const qy = new THREE.Quaternion().setFromAxisAngle(AX_Y, -theta);
+      const qx = new THREE.Quaternion().setFromAxisAngle(AX_X, Math.PI / 2 - phi);
+      this.quat.copy(qx).multiply(qy);
+      this.group.quaternion.copy(this.quat);
       this.renderer.render(this.scene, this.camera);
     }
 
-    resetView() { this.setView(0.65, 1.05); }
+    /* 画面内滚转（roll），deg 为角度 */
+    setRoll(deg) {
+      this.quat.premultiply(new THREE.Quaternion().setFromAxisAngle(AX_Z, deg * Math.PI / 180));
+      this.group.quaternion.copy(this.quat);
+      this.renderer.render(this.scene, this.camera);
+    }
+
+    /* 在当前视角基础上叠加一次自由旋转（世界坐标系） */
+    rotateBy(axisX, axisY, axisZ, ang) {
+      const q = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(axisX, axisY, axisZ).normalize(), ang);
+      this.quat.premultiply(q);
+      this.group.quaternion.copy(this.quat);
+    }
+
+    resetView() { this.setView(DEFAULT_VIEW[0], DEFAULT_VIEW[1]); }
 
     _clearGroup() {
       while (this.group.children.length) {
@@ -167,39 +193,71 @@
       if (this._sharedMat) { this._sharedMat.dispose(); this._sharedMat = null; }
     }
 
+    /* 相机固定在 +Z 方向看向原点，朝向全部由模型的四元数承担 */
     _updateCamera() {
-      const { theta, phi, radius } = this.orbit;
-      this.camera.position.set(
-        radius * Math.sin(phi) * Math.sin(theta),
-        radius * Math.cos(phi),
-        radius * Math.sin(phi) * Math.cos(theta)
-      );
+      this.camera.position.set(0, 0, this.radius);
+      this.camera.up.set(0, 1, 0);
       this.camera.lookAt(0, 0, 0);
+      this.group.quaternion.copy(this.quat);
     }
 
     _bindEvents() {
       const cv = this.canvas;
-      let dragging = false, lx = 0, ly = 0;
+      let dragging = false, lx = 0, ly = 0, rollMode = false;
       cv.style.touchAction = 'none';
+      cv.addEventListener('contextmenu', (e) => e.preventDefault());
       cv.addEventListener('pointerdown', (e) => {
-        dragging = true; lx = e.clientX; ly = e.clientY;
-        cv.setPointerCapture(e.pointerId);
+        dragging = true;
+        rollMode = e.shiftKey || e.button === 2 || e.ctrlKey;
+        lx = e.clientX; ly = e.clientY;
+        try { cv.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件等场景可忽略 */ }
       });
       cv.addEventListener('pointermove', (e) => {
         if (!dragging) return;
-        this.orbit.theta -= (e.clientX - lx) * 0.008;
-        this.orbit.phi -= (e.clientY - ly) * 0.008;
-        this.orbit.phi = Math.max(0.05, Math.min(Math.PI - 0.05, this.orbit.phi));
+        const dx = e.clientX - lx, dy = e.clientY - ly;
         lx = e.clientX; ly = e.clientY;
-        this._updateCamera();
+        if (rollMode) {
+          /* 滚转：绕视线轴（世界 Z）转，可把图形在画面里任意摆正 */
+          this._q.setFromAxisAngle(AX_Z, -(dx + dy) * 0.006);
+        } else {
+          /* 轨迹球：水平拖动绕世界 Y、垂直拖动绕世界 X，无角度限制 */
+          this._qa.setFromAxisAngle(AX_Y, dx * 0.009);
+          this._q.setFromAxisAngle(AX_X, dy * 0.009);
+          this._q.premultiply(this._qa);
+        }
+        this.quat.premultiply(this._q);
+        this.group.quaternion.copy(this.quat);
       });
-      cv.addEventListener('pointerup', () => { dragging = false; });
+      const stop = () => { dragging = false; };
+      cv.addEventListener('pointerup', stop);
+      cv.addEventListener('pointercancel', stop);
       cv.addEventListener('wheel', (e) => {
         e.preventDefault();
-        this.orbit.radius *= Math.exp(e.deltaY * 0.0012);
-        this.orbit.radius = Math.max(1.8, Math.min(12, this.orbit.radius));
+        this.radius *= Math.exp(e.deltaY * 0.0012);
+        this.radius = Math.max(1.2, Math.min(24, this.radius));
         this._updateCamera();
       }, { passive: false });
+      /* 双指捏合缩放（触屏） */
+      const pts = new Map();
+      let pinch0 = 0;
+      cv.addEventListener('pointerdown', (e) => pts.set(e.pointerId, e));
+      cv.addEventListener('pointermove', (e) => {
+        if (!pts.has(e.pointerId)) return;
+        pts.set(e.pointerId, e);
+        if (pts.size === 2) {
+          const [a, b] = [...pts.values()];
+          const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+          if (pinch0) {
+            this.radius = Math.max(1.2, Math.min(24, this.radius * (pinch0 / d)));
+            this._updateCamera();
+          }
+          pinch0 = d;
+          dragging = false;
+        }
+      });
+      const drop = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch0 = 0; };
+      cv.addEventListener('pointerup', drop);
+      cv.addEventListener('pointercancel', drop);
     }
 
     _resize() {
@@ -215,8 +273,8 @@
     _loop() {
       requestAnimationFrame(() => this._loop());
       if (this.autoRotate) {
-        this.orbit.theta += 0.006;
-        this._updateCamera();
+        this.quat.premultiply(this._qa.setFromAxisAngle(AX_Y, 0.007));
+        this.group.quaternion.copy(this.quat);
       }
       this.renderer.render(this.scene, this.camera);
     }
